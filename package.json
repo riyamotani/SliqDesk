@@ -7,7 +7,7 @@
     "apps/*"
   ],
   "scripts": {
-    "postinstall": "npm run build -w @sliqdesk/shared",
+    "postinstall": "npm run build -w @sliqdesk/shared && npm run prisma:generate -w @sliqdesk/api",
     "build": "npm run build --workspaces --if-present",
     "lint": "eslint .",
     "format": "prettier --write .",

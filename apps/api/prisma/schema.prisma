@@ -1,0 +1,124 @@
+// Data model for SliqDesk.
+//
+// Tenant isolation: every business row carries organizationId. Tickets and
+// comments also use *composite* foreign keys (id + organizationId), so the
+// database itself refuses to link a ticket to a user, or a comment to a
+// ticket, from a different organization, even if application code had a bug.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  agent
+  viewer
+}
+
+enum TicketStatus {
+  open
+  in_progress
+  resolved
+  closed
+}
+
+enum TicketPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  createdAt DateTime @default(now())
+
+  users    User[]
+  tickets  Ticket[]
+  comments Comment[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @db.Uuid
+  // Emails are globally unique: a user belongs to exactly one organization,
+  // so login needs only email + password.
+  email          String    @unique
+  name           String
+  passwordHash   String
+  role           Role
+  // Part of the auth token. Incrementing it invalidates every token issued
+  // before (used for logout and when a member is removed).
+  tokenVersion   Int       @default(0)
+  // Soft delete: removed members keep their name on old tickets/comments.
+  removedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdTickets   Ticket[]     @relation("TicketCreatedBy")
+  assignedTickets  Ticket[]     @relation("TicketAssignee")
+  comments         Comment[]
+
+  // Target for the composite foreign keys below.
+  @@unique([id, organizationId])
+  @@index([organizationId])
+  @@map("users")
+}
+
+model Ticket {
+  id              String         @id @default(uuid()) @db.Uuid
+  organizationId  String         @db.Uuid
+  title           String
+  description     String
+  status          TicketStatus   @default(open)
+  priority        TicketPriority @default(medium)
+  createdById     String         @db.Uuid
+  assigneeId      String?        @db.Uuid
+  // SLA bookkeeping. slaDueAt is set while a high/urgent ticket waits for a
+  // staff response; firstResponseAt is the first Admin/Agent comment;
+  // slaBreachedAt is set by the background worker when the deadline passes.
+  slaDueAt        DateTime?
+  firstResponseAt DateTime?
+  slaBreachedAt   DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("TicketCreatedBy", fields: [createdById, organizationId], references: [id, organizationId])
+  assignee     User?        @relation("TicketAssignee", fields: [assigneeId, organizationId], references: [id, organizationId])
+  comments     Comment[]
+
+  @@unique([id, organizationId])
+  // Supports the paginated list with its filters (newest first).
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, priority, createdAt])
+  @@index([organizationId, assigneeId, createdAt])
+  @@map("tickets")
+}
+
+model Comment {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  ticketId       String   @db.Uuid
+  authorId       String   @db.Uuid
+  body           String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ticket       Ticket       @relation(fields: [ticketId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  author       User         @relation(fields: [authorId, organizationId], references: [id, organizationId])
+
+  @@index([ticketId, createdAt])
+  @@map("comments")
+}
