@@ -40,12 +40,14 @@ npm install                                  # installs all workspaces, builds s
 docker compose up -d postgres redis          # database + Redis
 cp .env.example apps/api/.env                # local configuration (working defaults)
 npm run db:deploy -w @sliqdesk/api           # apply database migrations
+npm run dev -w @sliqdesk/api                 # API on http://localhost:4000 (restarts on save)
 ```
 
 ### Checks
 
 ```bash
-npm test               # unit tests
+npm test               # unit tests (no database needed)
+npm run test:integration   # API tests against Postgres (needs `docker compose up -d postgres`)
 npm run lint           # ESLint
 npm run format:check   # Prettier
 npm run typecheck      # TypeScript
@@ -98,7 +100,7 @@ _Endpoint list to come._
 | -------------------------------------- | ----------- | --------------------------------------- |
 | Data model and migrations              | Done        | Organizations, users, tickets, comments |
 | Shared roles, transitions, permissions | Done        | With unit tests                         |
-| Sign up, log in, log out               | Not started |                                         |
+| Sign up, log in, log out               | Done        | Logout revokes the token server-side    |
 | Member management                      | Not started |                                         |
 | Tickets (CRUD, filters, pagination)    | Not started |                                         |
 | Comments                               | Not started |                                         |
