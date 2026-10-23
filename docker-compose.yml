@@ -86,6 +86,19 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # The web app: http://localhost:8080. nginx serves the React build and
+  # forwards /api and /socket.io to the API on the internal network.
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - '8080:80'
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   redis-data:

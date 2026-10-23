@@ -16,6 +16,8 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/tsconfig.json packages/shared/
 COPY packages/shared/src packages/shared/src
 COPY apps/api/package.json apps/api/
+# Every workspace manifest is needed for `npm ci` to match the lockfile.
+COPY apps/web/package.json apps/web/
 COPY apps/api/prisma apps/api/prisma
 # postinstall builds the shared package and generates the Prisma client.
 RUN npm ci

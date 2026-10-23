@@ -1,0 +1,320 @@
+/* Deliberately small: the brief judges the UI on correctness, not polish. */
+:root {
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --text: #1d2330;
+  --muted: #6b7280;
+  --border: #e3e6ea;
+  --accent: #2f5bea;
+  --danger: #c62828;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+h1 {
+  font-size: 1.5rem;
+  margin: 0 0 0.5rem;
+}
+h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.5rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+.error {
+  color: var(--danger);
+  margin: 0.25rem 0;
+}
+.hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.centered {
+  text-align: center;
+  margin-top: 20vh;
+}
+
+/* Layout */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.brand {
+  font-weight: 700;
+}
+.topbar nav {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+}
+.topbar nav a.active {
+  font-weight: 600;
+  text-decoration: underline;
+}
+.me {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c4c9d0;
+}
+.live-dot.on {
+  background: #2e9d4f;
+}
+.container {
+  max-width: 1050px;
+  margin: 1.5rem auto;
+  padding: 0 1rem;
+}
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Forms */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+input,
+select,
+textarea {
+  font: inherit;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+}
+button {
+  font: inherit;
+  padding: 0.45rem 0.9rem;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button.secondary {
+  background: #e8ebf0;
+  color: var(--text);
+}
+button.danger {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+button.link {
+  background: none;
+  color: var(--accent);
+  padding: 0;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+.new-ticket {
+  margin: 0.5rem 0 1rem;
+}
+.auth-card {
+  max-width: 400px;
+  margin: 10vh auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+/* Lists */
+.filters {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+th,
+td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+th {
+  color: var(--muted);
+  font-weight: 600;
+  background: #fafbfc;
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+/* Badges */
+.badges {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.25rem 0 0.5rem;
+}
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: #eef0f3;
+  white-space: nowrap;
+}
+.status-open {
+  background: #e3ecff;
+  color: #2346a8;
+}
+.status-in_progress {
+  background: #fff1d6;
+  color: #8a5a00;
+}
+.status-resolved {
+  background: #dcf5e3;
+  color: #1f6b38;
+}
+.status-closed {
+  background: #eceef1;
+  color: #555;
+}
+.priority-urgent {
+  background: #fde2e2;
+  color: #a31d1d;
+}
+.priority-high {
+  background: #ffe8d6;
+  color: #9a4a00;
+}
+.sla-breached {
+  background: var(--danger);
+  color: #fff;
+}
+.sla-due {
+  background: #fff4cc;
+  color: #7a5c00;
+}
+.sla-met {
+  background: #dcf5e3;
+  color: #1f6b38;
+}
+.role-admin {
+  background: #ede3ff;
+  color: #5b2ea6;
+}
+.role-agent {
+  background: #e3ecff;
+  color: #2346a8;
+}
+
+/* Ticket detail */
+.description {
+  white-space: pre-wrap;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+.readonly-note {
+  color: var(--muted);
+  font-style: italic;
+}
+.comments ul {
+  list-style: none;
+  padding: 0;
+}
+.comment {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 0.5rem;
+}
+.comment p {
+  margin: 0.25rem 0 0;
+  white-space: pre-wrap;
+}
+
+/* Toasts */
+.toasts {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 360px;
+}
+.toast {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: #1d2330;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+}
+.toast-alert {
+  background: var(--danger);
+}

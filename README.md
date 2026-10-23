@@ -35,9 +35,15 @@ From a fresh clone, with Docker running:
 docker compose up --build
 ```
 
-This starts Postgres, Redis, the API (applies migrations and seeds demo data on start) and the
-SLA worker. No `.env` is needed; every setting has a working default (see `.env.example` to
-override). The API listens on <http://localhost:4000>.
+Then open **<http://localhost:8080>** and log in with one of the seeded accounts below.
+
+This starts Postgres, Redis, the API (applies migrations and seeds demo data on start), the SLA
+worker and the web app (nginx serving the React build and forwarding `/api` and `/socket.io` to
+the API). No `.env` is needed; every setting has a working default (see `.env.example` to
+override). The API is also reachable directly on <http://localhost:4000>.
+
+To see live updates, open the app in two browser windows (for example a normal and a private
+window) logged in as different members of the same organization.
 
 To start over with an empty database: `docker compose down -v`.
 
@@ -66,6 +72,7 @@ cp .env.example apps/api/.env                # local configuration (working defa
 npm run db:deploy -w @sliqdesk/api           # apply database migrations
 npm run db:seed:dev -w @sliqdesk/api         # demo data (safe to repeat)
 npm run dev -w @sliqdesk/api                 # API on http://localhost:4000 (restarts on save)
+npm run dev -w @sliqdesk/web                 # web app on http://localhost:5173 (proxies to the API)
 npm run dev:worker -w @sliqdesk/api          # SLA worker, in a second terminal
 ```
 
@@ -128,6 +135,23 @@ _Each decision and its trade-offs will be written up here._
 - Logout and member removal close that user's live sockets through their `user:` room.
 - The Socket.IO Redis adapter relays emits between processes, so updates reach clients on any
   API instance (and, next, from the SLA worker).
+
+### Frontend
+
+- Vite + React + React Query + React Router, deliberately plain styling.
+- **Server state lives in the React Query cache.** Real-time events write into or invalidate
+  that cache (`ticket.updated` replaces the cached ticket and refetches lists,
+  `comment.created` refetches that ticket's comments, `members.changed` refetches members and
+  the current user, since one's own role may have changed), so every open page updates itself.
+- **Reconnects refetch everything**, covering events missed while offline. If the server closes
+  the socket (logout elsewhere or removal), the app re-checks the session and returns to login.
+  Any `401` from the API does the same.
+- **Role-aware controls use the shared rule functions** the API enforces (`canUpdateTicket`,
+  `canComment`, `canManageMembers`, `STATUS_TRANSITIONS`), so the status picker only offers valid
+  next statuses and controls never appear for actions the server would reject.
+- Ticket list filters and page live in the URL, so they survive a refresh and can be shared.
+- One origin: nginx (Docker) or the Vite dev server proxies `/api` and `/socket.io`, so the
+  httpOnly cookie works without CORS.
 
 ### Background processing: SLA alerts
 
@@ -193,19 +217,19 @@ A Postman collection will be added.
 
 ## Implementation status
 
-| Requirement                            | Status      | Notes                                    |
-| -------------------------------------- | ----------- | ---------------------------------------- |
-| Data model and migrations              | Done        | Organizations, users, tickets, comments  |
-| Shared roles, transitions, permissions | Done        | With unit tests                          |
-| Sign up, log in, log out               | Done        | Logout revokes the token server-side     |
-| Member management                      | Done        | Last-admin protection, race-safe         |
-| Tickets (CRUD, filters, pagination)    | Done        | Transitions enforced, optimistic locking |
-| Comments                               | Done        |                                          |
-| Real-time updates                      | Done        | Socket.IO org rooms, Redis adapter       |
-| SLA alert                              | Done        | Delayed job + worker + sweep, live alert |
-| Frontend                               | Not started |                                          |
-| One-command Docker setup               | Partial     | Backend services done; web app next      |
-| Seed data                              | Done        | Idempotent, runs on API start            |
+| Requirement                            | Status | Notes                                    |
+| -------------------------------------- | ------ | ---------------------------------------- |
+| Data model and migrations              | Done   | Organizations, users, tickets, comments  |
+| Shared roles, transitions, permissions | Done   | With unit tests                          |
+| Sign up, log in, log out               | Done   | Logout revokes the token server-side     |
+| Member management                      | Done   | Last-admin protection, race-safe         |
+| Tickets (CRUD, filters, pagination)    | Done   | Transitions enforced, optimistic locking |
+| Comments                               | Done   |                                          |
+| Real-time updates                      | Done   | Socket.IO org rooms, Redis adapter       |
+| SLA alert                              | Done   | Delayed job + worker + sweep, live alert |
+| Frontend                               | Done   | All pages, live updates, role-aware      |
+| One-command Docker setup               | Done   | postgres, redis, api, worker, web        |
+| Seed data                              | Done   | Idempotent, runs on API start            |
 
 ## Assumptions
 
