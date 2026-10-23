@@ -24,6 +24,13 @@ export async function resetDatabase(prisma: Deps['prisma']) {
   );
 }
 
+/** Logs in and returns a supertest agent that keeps the session cookie. */
+export async function loginAs(app: ReturnType<typeof createApp>, email: string, password: string) {
+  const agent = supertest.agent(app);
+  await agent.post('/api/auth/login').send({ email, password }).expect(200);
+  return agent;
+}
+
 /** Signs up a new organization and returns an agent that keeps its session cookie. */
 export async function signupOrg(app: ReturnType<typeof createApp>, prefix: string) {
   const agent = supertest.agent(app);

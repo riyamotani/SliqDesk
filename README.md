@@ -101,7 +101,7 @@ _Endpoint list to come._
 | Data model and migrations              | Done        | Organizations, users, tickets, comments |
 | Shared roles, transitions, permissions | Done        | With unit tests                         |
 | Sign up, log in, log out               | Done        | Logout revokes the token server-side    |
-| Member management                      | Not started |                                         |
+| Member management                      | Done        | Last-admin protection, race-safe        |
 | Tickets (CRUD, filters, pagination)    | Not started |                                         |
 | Comments                               | Not started |                                         |
 | Real-time updates                      | Not started |                                         |
@@ -115,7 +115,16 @@ _Endpoint list to come._
 - **Emails are globally unique.** A user belongs to exactly one organization, so login needs
   only email and password.
 - **Removing a member is a soft delete.** They lose access immediately, their open assignments
-  are cleared, and their past tickets and comments keep their name.
+  are cleared, and their past tickets and comments keep their name. Adding the same email to
+  the same organization again reactivates them.
+- **New members get an initial password from the Admin** (no email infrastructure required).
+- **Every member can list their organization's members** (needed for assignee pickers and
+  filters); only Admins can add, change or remove members.
+- **An organization always keeps at least one Admin**, and Admins cannot remove themselves.
+  Member changes lock the organization row, so two Admins demoting each other at once cannot
+  leave it without an Admin.
+- **Demoting a member to Viewer unassigns their open tickets**, since Viewers cannot work
+  tickets. Closed tickets keep their assignee because closed tickets are frozen.
 - **Agents can assign tickets they may edit to any Admin or Agent** in their organization.
   Viewers can never be assignees.
 - **Status transitions:** `open → in_progress | resolved | closed`,
