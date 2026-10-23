@@ -1,9 +1,13 @@
 import { createServer } from 'node:http';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { Redis } from 'ioredis';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { createPrisma } from './db.js';
 import type { Deps } from './deps.js';
 import { createLogger } from './lib/logger.js';
+import { createSocketPublisher } from './realtime/publisher.js';
+import { createSocketServer } from './realtime/socket.js';
 
 async function main() {
   const config = loadConfig();
@@ -11,18 +15,31 @@ async function main() {
   const prisma = createPrisma(config);
   await prisma.$connect();
 
-  const deps: Deps = { config, prisma, logger };
-  const server = createServer(createApp(deps));
+  // Redis pub/sub for Socket.IO: an event emitted on any API instance (or by
+  // the worker) is relayed to clients connected to every instance.
+  const redisPub = new Redis(config.REDIS_URL);
+  const redisSub = redisPub.duplicate();
 
-  server.listen(config.PORT, () => {
+  const httpServer = createServer();
+  const io = createSocketServer(
+    httpServer,
+    { config, prisma, logger },
+    createAdapter(redisPub, redisSub),
+  );
+  const deps: Deps = { config, prisma, logger, publisher: createSocketPublisher(io) };
+  httpServer.on('request', createApp(deps));
+
+  httpServer.listen(config.PORT, () => {
     logger.info(`API listening on port ${config.PORT}`);
   });
 
   // Graceful shutdown: stop accepting connections, let in-flight requests
-  // finish, then close the database pool. Docker sends SIGTERM on stop.
+  // finish, then close Redis and the database pool. Docker sends SIGTERM on stop.
   const shutdown = (signal: string) => {
     logger.info(`${signal} received, shutting down`);
-    server.close(() => {
+    void io.close(() => {
+      redisPub.disconnect();
+      redisSub.disconnect();
       void prisma.$disconnect().finally(() => process.exit(0));
     });
     setTimeout(() => process.exit(1), 10_000).unref();

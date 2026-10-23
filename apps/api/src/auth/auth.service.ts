@@ -101,6 +101,8 @@ export async function logout(deps: Deps, userId: string): Promise<void> {
     where: { id: userId },
     data: { tokenVersion: { increment: 1 } },
   });
+  // Live sockets were authenticated with the old token: close them too.
+  deps.publisher.disconnectUser(userId);
 }
 
 /**
@@ -108,7 +110,10 @@ export async function logout(deps: Deps, userId: string): Promise<void> {
  * the user was removed, or the token was revoked (tokenVersion changed).
  * Used by both the REST middleware and the Socket.IO handshake.
  */
-export async function resolveSession(deps: Deps, token: string): Promise<AuthContext | null> {
+export async function resolveSession(
+  deps: Pick<Deps, 'config' | 'prisma'>,
+  token: string,
+): Promise<AuthContext | null> {
   const payload = verifyToken(deps.config, token);
   if (!payload) return null;
 

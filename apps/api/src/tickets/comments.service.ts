@@ -41,5 +41,7 @@ export async function addComment(
     },
     include: commentInclude,
   });
-  return toComment(row);
+  const comment = toComment(row);
+  deps.publisher.toOrg(auth.organizationId, 'comment.created', { comment });
+  return comment;
 }

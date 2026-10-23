@@ -4,14 +4,24 @@ import { loadConfig } from '../src/config.js';
 import { createPrisma } from '../src/db.js';
 import type { Deps } from '../src/deps.js';
 import { createLogger } from '../src/lib/logger.js';
+import { createRecordingPublisher } from '../src/realtime/publisher.js';
 
-/** Real app wired to the test database, plus a supertest client for it. */
+/**
+ * Real app wired to the test database, plus a supertest client for it.
+ * Real-time events are recorded (not sent) so tests can assert on them.
+ */
 export function createTestContext() {
   const config = loadConfig();
   const prisma = createPrisma(config);
-  const deps: Deps = { config, prisma, logger: createLogger('silent', 'test') };
+  const recorder = createRecordingPublisher();
+  const deps: Deps = {
+    config,
+    prisma,
+    logger: createLogger('silent', 'test'),
+    publisher: recorder.publisher,
+  };
   const app = createApp(deps);
-  return { deps, prisma, app, request: supertest(app) };
+  return { deps, prisma, app, request: supertest(app), recorder };
 }
 
 /** Empties every table between tests. Refuses to run against a non-test database. */

@@ -103,7 +103,10 @@ export async function createTicket(
     },
     include: ticketInclude,
   });
-  return toTicket(row);
+  const ticket = toTicket(row);
+  // Events are emitted only after the database write succeeded.
+  deps.publisher.toOrg(auth.organizationId, 'ticket.created', { ticket });
+  return ticket;
 }
 
 export async function updateTicket(
@@ -131,5 +134,7 @@ export async function updateTicket(
     throw conflict('TICKET_CHANGED', 'This ticket was just changed by someone else. Reload it.');
   }
 
-  return toTicket(await findTicketOrThrow(deps.prisma, auth.organizationId, ticketId));
+  const ticket = toTicket(await findTicketOrThrow(deps.prisma, auth.organizationId, ticketId));
+  deps.publisher.toOrg(auth.organizationId, 'ticket.updated', { ticket });
+  return ticket;
 }

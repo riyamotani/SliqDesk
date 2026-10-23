@@ -16,6 +16,7 @@ updates and SLA alerts. Node.js (Express) API + React frontend, started with one
     - [Checks](#checks)
   - [Architecture](#architecture)
   - [Key decisions](#key-decisions)
+    - [Real-time updates](#real-time-updates)
     - [Data model and tenant isolation (so far)](#data-model-and-tenant-isolation-so-far)
   - [API](#api)
   - [Implementation status](#implementation-status)
@@ -79,6 +80,19 @@ apps/web          React frontend (Vite)
 
 _Each decision and its trade-offs will be written up here._
 
+### Real-time updates
+
+- Socket.IO runs inside the API on `/socket.io`. The browser's session cookie is sent with the
+  WebSocket handshake and checked with the same `resolveSession` as REST requests.
+- The server, not the client, decides subscriptions: each socket joins only `org:<its org>` and
+  `user:<its id>`. Services emit after a successful database write, always to one org room, so
+  a client has no way to receive another organization's events.
+- Events: `ticket.created`, `ticket.updated`, `comment.created`, `members.changed`. Payloads
+  carry the full ticket or comment, so clients update without refetching.
+- Logout and member removal close that user's live sockets through their `user:` room.
+- The Socket.IO Redis adapter relays emits between processes, so updates reach clients on any
+  API instance (and, next, from the SLA worker).
+
 ### Data model and tenant isolation (so far)
 
 - Every business table has an `organizationId` column.
@@ -129,7 +143,7 @@ A Postman collection will be added.
 | Member management                      | Done        | Last-admin protection, race-safe         |
 | Tickets (CRUD, filters, pagination)    | Done        | Transitions enforced, optimistic locking |
 | Comments                               | Done        |                                          |
-| Real-time updates                      | Not started |                                          |
+| Real-time updates                      | Done        | Socket.IO org rooms, Redis adapter       |
 | SLA alert                              | Not started |                                          |
 | Frontend                               | Not started |                                          |
 | One-command Docker setup               | Partial     | Postgres and Redis only so far           |

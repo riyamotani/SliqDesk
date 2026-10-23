@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTestContext, loginAs, resetDatabase, signupOrg } from './helpers.js';
 
-const { app, prisma } = createTestContext();
+const { app, prisma, recorder } = createTestContext();
 
 beforeEach(() => resetDatabase(prisma));
 afterAll(() => prisma.$disconnect());
@@ -195,5 +195,17 @@ describe('removing members', () => {
   it('rejects ids that are not UUIDs with 400', async () => {
     const { admin } = await setupAcme();
     await admin.delete('/api/members/not-a-uuid').expect(400);
+  });
+
+  it("disconnects the removed member's sockets and notifies only their organization", async () => {
+    const { admin, agentId, orgId } = await setupAcme();
+    recorder.events.length = 0;
+
+    await admin.delete(`/api/members/${agentId}`).expect(204);
+
+    expect(recorder.disconnected).toContain(agentId);
+    expect(recorder.events).toEqual([
+      { organizationId: orgId, event: 'members.changed', payload: undefined },
+    ]);
   });
 });

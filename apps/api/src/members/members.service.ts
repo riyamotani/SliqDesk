@@ -78,6 +78,16 @@ export async function addMember(
   input: CreateMemberInput,
 ): Promise<Member> {
   requireAdmin(auth);
+  const member = await createOrReactivateMember(deps, auth, input);
+  deps.publisher.toOrg(auth.organizationId, 'members.changed');
+  return member;
+}
+
+async function createOrReactivateMember(
+  deps: Deps,
+  auth: AuthContext,
+  input: CreateMemberInput,
+): Promise<Member> {
   const passwordHash = await hashPassword(input.password);
 
   const existing = await deps.prisma.user.findUnique({ where: { email: input.email } });
@@ -127,7 +137,7 @@ export async function updateMemberRole(
 ): Promise<Member> {
   requireAdmin(auth);
 
-  return deps.prisma.$transaction(async (tx) => {
+  const result = await deps.prisma.$transaction(async (tx) => {
     await lockOrganization(tx, auth.organizationId);
     const member = await findActiveMember(tx, auth.organizationId, memberId);
     if (member.role === input.role) return toMember(member);
@@ -141,6 +151,10 @@ export async function updateMemberRole(
     });
     return toMember(updated);
   });
+  // After the transaction committed. Clients refetch members (and tickets,
+  // since demotion to Viewer may have unassigned some).
+  deps.publisher.toOrg(auth.organizationId, 'members.changed');
+  return result;
 }
 
 /**
@@ -164,4 +178,7 @@ export async function removeMember(deps: Deps, auth: AuthContext, memberId: stri
       data: { removedAt: new Date(), tokenVersion: { increment: 1 } },
     });
   });
+  // Cut the removed member's live connections right away, then tell the org.
+  deps.publisher.disconnectUser(memberId);
+  deps.publisher.toOrg(auth.organizationId, 'members.changed');
 }
