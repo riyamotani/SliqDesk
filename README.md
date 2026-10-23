@@ -92,23 +92,48 @@ _Each decision and its trade-offs will be written up here._
 
 ## API
 
-_Endpoint list to come._
+All endpoints are under `/api`, take and return JSON, and authenticate with the session cookie
+set by sign-up or login. Errors always look like `{ "error": { "code", "message", "details?" } }`.
+A Postman collection will be added.
+
+| Method | Path                    | Who            | Purpose                                               |
+| ------ | ----------------------- | -------------- | ----------------------------------------------------- |
+| POST   | `/auth/signup`          | Anyone         | Create an organization and its first Admin            |
+| POST   | `/auth/login`           | Anyone         | Start a session                                       |
+| POST   | `/auth/logout`          | Anyone         | End all of the user's sessions                        |
+| GET    | `/auth/me`              | Member         | Current user and organization                         |
+| GET    | `/members`              | Member         | List active members                                   |
+| POST   | `/members`              | Admin          | Add a member with a role and initial password         |
+| PATCH  | `/members/:id`          | Admin          | Change a member's role                                |
+| DELETE | `/members/:id`          | Admin          | Remove a member                                       |
+| GET    | `/tickets`              | Member         | List tickets (filters below)                          |
+| POST   | `/tickets`              | Admin, Agent   | Create a ticket                                       |
+| GET    | `/tickets/:id`          | Member         | Ticket details                                        |
+| PATCH  | `/tickets/:id`          | Admin, Agent\* | Update title, description, status, priority, assignee |
+| GET    | `/tickets/:id/comments` | Member         | Comments, oldest first                                |
+| POST   | `/tickets/:id/comments` | Admin, Agent   | Add a comment                                         |
+
+\* Agents only on tickets assigned to them or unassigned.
+
+`GET /tickets` query parameters: `status`, `priority`, `assigneeId` (a member id, `me` or
+`unassigned`), `page` (default 1), `pageSize` (default 20, max 100). Response:
+`{ data, page, pageSize, total }`, newest first.
 
 ## Implementation status
 
-| Requirement                            | Status      | Notes                                   |
-| -------------------------------------- | ----------- | --------------------------------------- |
-| Data model and migrations              | Done        | Organizations, users, tickets, comments |
-| Shared roles, transitions, permissions | Done        | With unit tests                         |
-| Sign up, log in, log out               | Done        | Logout revokes the token server-side    |
-| Member management                      | Done        | Last-admin protection, race-safe        |
-| Tickets (CRUD, filters, pagination)    | Not started |                                         |
-| Comments                               | Not started |                                         |
-| Real-time updates                      | Not started |                                         |
-| SLA alert                              | Not started |                                         |
-| Frontend                               | Not started |                                         |
-| One-command Docker setup               | Partial     | Postgres and Redis only so far          |
-| Seed data                              | Not started |                                         |
+| Requirement                            | Status      | Notes                                    |
+| -------------------------------------- | ----------- | ---------------------------------------- |
+| Data model and migrations              | Done        | Organizations, users, tickets, comments  |
+| Shared roles, transitions, permissions | Done        | With unit tests                          |
+| Sign up, log in, log out               | Done        | Logout revokes the token server-side     |
+| Member management                      | Done        | Last-admin protection, race-safe         |
+| Tickets (CRUD, filters, pagination)    | Done        | Transitions enforced, optimistic locking |
+| Comments                               | Done        |                                          |
+| Real-time updates                      | Not started |                                          |
+| SLA alert                              | Not started |                                          |
+| Frontend                               | Not started |                                          |
+| One-command Docker setup               | Partial     | Postgres and Redis only so far           |
+| Seed data                              | Not started |                                          |
 
 ## Assumptions
 
@@ -127,9 +152,24 @@ _Endpoint list to come._
   tickets. Closed tickets keep their assignee because closed tickets are frozen.
 - **Agents can assign tickets they may edit to any Admin or Agent** in their organization.
   Viewers can never be assignees.
-- **Status transitions:** `open → in_progress | resolved | closed`,
-  `in_progress → open | resolved | closed`, `resolved → open | in_progress | closed`;
-  `closed` is final.
+- **Status transitions:**
+
+  | From          | Allowed to                       |
+  | ------------- | -------------------------------- |
+  | `open`        | `in_progress`, `closed`          |
+  | `in_progress` | `open`, `resolved`, `closed`     |
+  | `resolved`    | `in_progress` (reopen), `closed` |
+  | `closed`      | nothing: closed is final         |
+
+  Only a ticket someone worked on can be resolved; open tickets can be closed directly (spam,
+  duplicates). Anything else returns `422 INVALID_TRANSITION`.
+
+- **A closed ticket cannot be changed at all**, including new comments (`409 TICKET_CLOSED`).
+- **Updates ignore fields equal to their current value**, so clients can resend a whole form.
+- **Concurrent edits:** an update only applies if the ticket hasn't changed since the server
+  read it; otherwise `409 TICKET_CHANGED` (e.g. two Agents claiming the same ticket at once).
+- **Agents may edit title and description** on the tickets they can update, not just status,
+  priority and assignee.
 
 ## Next steps
 

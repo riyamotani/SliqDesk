@@ -17,13 +17,16 @@ export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
 export const SLA_PRIORITIES: readonly TicketPriority[] = ['high', 'urgent'];
 
 /**
- * Allowed status transitions. `closed` is terminal: a closed ticket cannot be
- * changed at all. `resolved` can be reopened if the customer comes back.
+ * Allowed status transitions:
+ * - Only a ticket someone is working on can be resolved (no open -> resolved).
+ * - Open tickets can be closed directly (spam, duplicates).
+ * - Resolved tickets can be reopened, which puts them back in progress.
+ * - `closed` is terminal: a closed ticket cannot be changed at all.
  */
 export const STATUS_TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> = {
-  open: ['in_progress', 'resolved', 'closed'],
+  open: ['in_progress', 'closed'],
   in_progress: ['open', 'resolved', 'closed'],
-  resolved: ['open', 'in_progress', 'closed'],
+  resolved: ['in_progress', 'closed'],
   closed: [],
 };
 

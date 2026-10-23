@@ -31,6 +31,36 @@ export async function loginAs(app: ReturnType<typeof createApp>, email: string, 
   return agent;
 }
 
+/**
+ * An organization with one logged-in user per role. Emails are
+ * `<role>@<prefix>.test`, password "password123".
+ */
+export async function setupOrgWithRoles(app: ReturnType<typeof createApp>, prefix: string) {
+  const { agent: admin, user } = await signupOrg(app, prefix);
+  const domain = `${prefix.toLowerCase()}.test`;
+  const ids: Record<'agent' | 'agent2' | 'viewer', string> = { agent: '', agent2: '', viewer: '' };
+  for (const [key, role] of [
+    ['agent', 'agent'],
+    ['agent2', 'agent'],
+    ['viewer', 'viewer'],
+  ] as const) {
+    const res = await admin
+      .post('/api/members')
+      .send({ name: key, email: `${key}@${domain}`, role, password: 'password123' })
+      .expect(201);
+    ids[key] = res.body.member.id;
+  }
+  return {
+    orgId: user.organization.id,
+    adminId: user.id,
+    ...ids,
+    asAdmin: admin,
+    asAgent: await loginAs(app, `agent@${domain}`, 'password123'),
+    asAgent2: await loginAs(app, `agent2@${domain}`, 'password123'),
+    asViewer: await loginAs(app, `viewer@${domain}`, 'password123'),
+  };
+}
+
 /** Signs up a new organization and returns an agent that keeps its session cookie. */
 export async function signupOrg(app: ReturnType<typeof createApp>, prefix: string) {
   const agent = supertest.agent(app);

@@ -20,8 +20,17 @@ describe('status transitions', () => {
     expect(canTransition('resolved', 'closed')).toBe(true);
   });
 
-  it('allows reopening a resolved ticket', () => {
-    expect(canTransition('resolved', 'open')).toBe(true);
+  it('allows closing an open ticket directly (spam, duplicates)', () => {
+    expect(canTransition('open', 'closed')).toBe(true);
+  });
+
+  it('reopens a resolved ticket by putting it back in progress', () => {
+    expect(canTransition('resolved', 'in_progress')).toBe(true);
+    expect(canTransition('resolved', 'open')).toBe(false);
+  });
+
+  it('only resolves tickets that someone has worked on', () => {
+    expect(canTransition('open', 'resolved')).toBe(false);
   });
 
   it('never allows leaving closed', () => {
