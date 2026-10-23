@@ -11,6 +11,7 @@ import type { Deps } from '../src/deps.js';
 import { createLogger } from '../src/lib/logger.js';
 import { createSocketPublisher, type SocketServer } from '../src/realtime/publisher.js';
 import { createSocketServer } from '../src/realtime/socket.js';
+import { createRecordingScheduler } from '../src/sla/sla.queue.js';
 import { resetDatabase } from './helpers.js';
 
 /**
@@ -28,7 +29,13 @@ const sockets: Socket[] = [];
 beforeAll(async () => {
   httpServer = createServer();
   io = createSocketServer(httpServer, { config, prisma, logger });
-  const deps: Deps = { config, prisma, logger, publisher: createSocketPublisher(io) };
+  const deps: Deps = {
+    config,
+    prisma,
+    logger,
+    publisher: createSocketPublisher(io),
+    slaScheduler: createRecordingScheduler().scheduler,
+  };
   httpServer.on('request', createApp(deps));
   await new Promise<void>((resolve) => httpServer.listen(0, resolve));
   baseUrl = `http://localhost:${(httpServer.address() as AddressInfo).port}`;

@@ -10,10 +10,31 @@ import {
 import type { AuthContext } from '../auth/auth.service.js';
 import type { Deps } from '../deps.js';
 import { conflict, forbidden, notFound, unprocessable } from '../lib/errors.js';
+import { initialSlaDueAt, slaDueAtAfterPriorityChange } from '../sla/sla.rules.js';
 import { ticketInclude, toTicket } from './ticket.mapper.js';
 import { planTicketUpdate } from './ticket.rules.js';
 
 type Db = Deps['prisma'] | Prisma.TransactionClient;
+
+/**
+ * Queues the SLA check for a ticket's deadline. Never fails the request: the
+ * ticket and its deadline are already saved, so if Redis is unreachable the
+ * worker's periodic sweep still flags the ticket in time.
+ */
+async function scheduleSlaCheck(deps: Deps, ticket: Ticket, organizationId: string) {
+  if (!ticket.slaDueAt) return;
+  try {
+    await deps.slaScheduler.schedule(
+      { ticketId: ticket.id, organizationId },
+      new Date(ticket.slaDueAt),
+    );
+  } catch (err) {
+    deps.logger.error(
+      { err, ticketId: ticket.id },
+      'Could not queue SLA check; sweep will cover it',
+    );
+  }
+}
 
 /**
  * A ticket of the caller's organization, or 404. Every ticket lookup goes
@@ -100,12 +121,14 @@ export async function createTicket(
       description: input.description,
       priority: input.priority,
       assigneeId: input.assigneeId ?? null,
+      slaDueAt: initialSlaDueAt(input.priority, new Date(), deps.config.SLA_MINUTES),
     },
     include: ticketInclude,
   });
   const ticket = toTicket(row);
   // Events are emitted only after the database write succeeded.
   deps.publisher.toOrg(auth.organizationId, 'ticket.created', { ticket });
+  await scheduleSlaCheck(deps, ticket, auth.organizationId);
   return ticket;
 }
 
@@ -123,12 +146,20 @@ export async function updateTicket(
     await assertAssignable(deps.prisma, auth.organizationId, changes.assigneeId);
   }
 
+  // Raising to high/urgent starts the SLA clock; lowering stops it.
+  const data: Prisma.TicketUpdateManyMutationInput = { ...changes };
+  const slaDueAt =
+    changes.priority === undefined
+      ? undefined
+      : slaDueAtAfterPriorityChange(current, changes.priority, new Date(), deps.config.SLA_MINUTES);
+  if (slaDueAt !== undefined) data.slaDueAt = slaDueAt;
+
   // Optimistic concurrency: only write if nobody changed the ticket since we
   // read it. Otherwise our permission check may be stale (e.g. someone else
   // claimed the ticket a moment ago), so we refuse instead of overwriting.
   const { count } = await deps.prisma.ticket.updateMany({
     where: { id: current.id, organizationId: auth.organizationId, updatedAt: current.updatedAt },
-    data: changes,
+    data,
   });
   if (count === 0) {
     throw conflict('TICKET_CHANGED', 'This ticket was just changed by someone else. Reload it.');
@@ -136,5 +167,6 @@ export async function updateTicket(
 
   const ticket = toTicket(await findTicketOrThrow(deps.prisma, auth.organizationId, ticketId));
   deps.publisher.toOrg(auth.organizationId, 'ticket.updated', { ticket });
+  if (slaDueAt) await scheduleSlaCheck(deps, ticket, auth.organizationId);
   return ticket;
 }

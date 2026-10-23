@@ -8,6 +8,7 @@ import type { Deps } from './deps.js';
 import { createLogger } from './lib/logger.js';
 import { createSocketPublisher } from './realtime/publisher.js';
 import { createSocketServer } from './realtime/socket.js';
+import { createSlaScheduler } from './sla/sla.queue.js';
 
 async function main() {
   const config = loadConfig();
@@ -26,7 +27,15 @@ async function main() {
     { config, prisma, logger },
     createAdapter(redisPub, redisSub),
   );
-  const deps: Deps = { config, prisma, logger, publisher: createSocketPublisher(io) };
+  // The API only adds SLA jobs; the separate worker process runs them.
+  const slaScheduler = createSlaScheduler(new Redis(config.REDIS_URL));
+  const deps: Deps = {
+    config,
+    prisma,
+    logger,
+    publisher: createSocketPublisher(io),
+    slaScheduler,
+  };
   httpServer.on('request', createApp(deps));
 
   httpServer.listen(config.PORT, () => {
@@ -38,6 +47,7 @@ async function main() {
   const shutdown = (signal: string) => {
     logger.info(`${signal} received, shutting down`);
     void io.close(() => {
+      void slaScheduler.queue.close();
       redisPub.disconnect();
       redisSub.disconnect();
       void prisma.$disconnect().finally(() => process.exit(0));

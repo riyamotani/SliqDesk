@@ -42,7 +42,19 @@ docker compose up -d postgres redis          # database + Redis
 cp .env.example apps/api/.env                # local configuration (working defaults)
 npm run db:deploy -w @sliqdesk/api           # apply database migrations
 npm run dev -w @sliqdesk/api                 # API on http://localhost:4000 (restarts on save)
+npm run dev:worker -w @sliqdesk/api          # SLA worker, in a second terminal
 ```
+
+### Triggering an SLA alert
+
+1. Set `SLA_MINUTES` low (the default is `2`; `0.5` means 30 seconds) and start the API and the
+   worker.
+2. As an Admin or Agent, create a ticket with priority **high** or **urgent**.
+3. Don't comment on it as an Admin or Agent. When the time is up, the ticket is flagged
+   overdue and every member of the organization gets a live alert.
+
+A staff comment before the deadline, resolving or closing the ticket, or lowering its priority
+stops the clock.
 
 ### Checks
 
@@ -92,6 +104,28 @@ _Each decision and its trade-offs will be written up here._
 - Logout and member removal close that user's live sockets through their `user:` room.
 - The Socket.IO Redis adapter relays emits between processes, so updates reach clients on any
   API instance (and, next, from the SLA worker).
+
+### Background processing: SLA alerts
+
+- **Deadline in Postgres, timer in Redis.** When a ticket is created or raised to high/urgent
+  without a staff response, the API stores `slaDueAt` and queues a BullMQ **delayed job** for
+  that moment. The job lives in Redis, so an API restart loses nothing.
+- **A separate worker process** (same codebase, `worker.ts`, its own container) runs the jobs.
+  It never slows API requests and keeps working while the API restarts.
+- **The database decides.** The job only says "check ticket X now". The worker runs one
+  conditional `UPDATE … SET slaBreachedAt = now WHERE firstResponseAt IS NULL AND
+slaBreachedAt IS NULL AND slaDueAt <= now AND priority IN (high, urgent) AND status IN (open,
+in_progress)`. If a staff member replied, the ticket was resolved or its priority lowered, the
+  update matches nothing and the job is a harmless no-op.
+- **Exactly-once alerts.** Because of `slaBreachedAt IS NULL`, retries or a race between the
+  job and the sweep flag (and announce) a ticket once.
+- **Safety-net sweep.** Every `SLA_SWEEP_SECONDS` (and on worker start) the worker flags any
+  overdue ticket. This covers the dual-write gap: if Redis was unreachable when a ticket was
+  saved, the request still succeeds, the error is logged, and the sweep catches the ticket.
+- **Alerts** go out as `ticket.sla_breached` through the Socket.IO Redis emitter, which the
+  API's Redis adapter delivers to that organization's sockets only.
+- **First response** is recorded on the first Admin/Agent comment, in the same transaction as
+  the comment, with a conditional update so concurrent comments can't overwrite it.
 
 ### Data model and tenant isolation (so far)
 
@@ -144,7 +178,7 @@ A Postman collection will be added.
 | Tickets (CRUD, filters, pagination)    | Done        | Transitions enforced, optimistic locking |
 | Comments                               | Done        |                                          |
 | Real-time updates                      | Done        | Socket.IO org rooms, Redis adapter       |
-| SLA alert                              | Not started |                                          |
+| SLA alert                              | Done        | Delayed job + worker + sweep, live alert |
 | Frontend                               | Not started |                                          |
 | One-command Docker setup               | Partial     | Postgres and Redis only so far           |
 | Seed data                              | Not started |                                          |

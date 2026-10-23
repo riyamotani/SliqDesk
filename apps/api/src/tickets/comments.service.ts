@@ -1,8 +1,8 @@
-import { canComment, type Comment, type CreateCommentInput } from '@sliqdesk/shared';
+import { canComment, isStaffRole, type Comment, type CreateCommentInput } from '@sliqdesk/shared';
 import type { AuthContext } from '../auth/auth.service.js';
 import type { Deps } from '../deps.js';
 import { conflict, forbidden } from '../lib/errors.js';
-import { commentInclude, toComment } from './ticket.mapper.js';
+import { commentInclude, ticketInclude, toComment, toTicket } from './ticket.mapper.js';
 import { findTicketOrThrow } from './tickets.service.js';
 
 export async function listComments(
@@ -32,16 +32,37 @@ export async function addComment(
     throw conflict('TICKET_CLOSED', 'Closed tickets cannot be changed');
   }
 
-  const row = await deps.prisma.comment.create({
-    data: {
-      organizationId: auth.organizationId,
-      ticketId: ticket.id,
-      authorId: auth.id,
-      body: input.body,
-    },
-    include: commentInclude,
+  const { row, firstResponse } = await deps.prisma.$transaction(async (tx) => {
+    const row = await tx.comment.create({
+      data: {
+        organizationId: auth.organizationId,
+        ticketId: ticket.id,
+        authorId: auth.id,
+        body: input.body,
+      },
+      include: commentInclude,
+    });
+    // The first Admin/Agent comment satisfies the SLA. The condition makes it
+    // race-safe: only one comment can ever set firstResponseAt.
+    const { count } = isStaffRole(auth.role)
+      ? await tx.ticket.updateMany({
+          where: { id: ticket.id, organizationId: auth.organizationId, firstResponseAt: null },
+          data: { firstResponseAt: row.createdAt },
+        })
+      : { count: 0 };
+    return { row, firstResponse: count === 1 };
   });
+
   const comment = toComment(row);
   deps.publisher.toOrg(auth.organizationId, 'comment.created', { comment });
+  if (firstResponse) {
+    const updated = await deps.prisma.ticket.findFirst({
+      where: { id: ticket.id, organizationId: auth.organizationId },
+      include: ticketInclude,
+    });
+    if (updated) {
+      deps.publisher.toOrg(auth.organizationId, 'ticket.updated', { ticket: toTicket(updated) });
+    }
+  }
   return comment;
 }

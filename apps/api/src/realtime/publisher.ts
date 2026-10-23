@@ -1,4 +1,5 @@
 import type { ServerEventName, ServerToClientEvents } from '@sliqdesk/shared';
+import type { Emitter } from '@socket.io/redis-emitter';
 import { orgRoom, userRoom } from '@sliqdesk/shared';
 import type { Server } from 'socket.io';
 import type { AuthContext } from '../auth/auth.service.js';
@@ -36,6 +37,22 @@ export function createSocketPublisher(io: SocketServer): EventPublisher {
     },
     disconnectUser(userId) {
       io.in(userRoom(userId)).disconnectSockets(true);
+    },
+  };
+}
+
+/**
+ * Publishes from a process that has no Socket.IO server (the SLA worker). The
+ * emitter writes to the same Redis channels the API's Redis adapter listens
+ * on, so the API delivers the event to the right sockets.
+ */
+export function createEmitterPublisher(emitter: Emitter<ServerToClientEvents>): EventPublisher {
+  return {
+    toOrg(organizationId, event, ...args) {
+      emitter.to(orgRoom(organizationId)).emit(event, ...args);
+    },
+    disconnectUser(userId) {
+      emitter.in(userRoom(userId)).disconnectSockets(true);
     },
   };
 }

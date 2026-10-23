@@ -5,6 +5,7 @@ import { createPrisma } from '../src/db.js';
 import type { Deps } from '../src/deps.js';
 import { createLogger } from '../src/lib/logger.js';
 import { createRecordingPublisher } from '../src/realtime/publisher.js';
+import { createRecordingScheduler } from '../src/sla/sla.queue.js';
 
 /**
  * Real app wired to the test database, plus a supertest client for it.
@@ -14,14 +15,16 @@ export function createTestContext() {
   const config = loadConfig();
   const prisma = createPrisma(config);
   const recorder = createRecordingPublisher();
+  const sla = createRecordingScheduler();
   const deps: Deps = {
     config,
     prisma,
     logger: createLogger('silent', 'test'),
     publisher: recorder.publisher,
+    slaScheduler: sla.scheduler,
   };
   const app = createApp(deps);
-  return { deps, prisma, app, request: supertest(app), recorder };
+  return { deps, prisma, app, request: supertest(app), recorder, sla };
 }
 
 /** Empties every table between tests. Refuses to run against a non-test database. */
