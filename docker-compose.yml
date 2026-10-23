@@ -1,3 +1,17 @@
+# `docker compose up` starts the whole system with working defaults.
+# Override any ${VAR:-default} below with a .env file next to this one.
+
+x-api-env: &api-env
+  NODE_ENV: production
+  DATABASE_URL: postgresql://${POSTGRES_USER:-sliqdesk}:${POSTGRES_PASSWORD:-sliqdesk}@postgres:5432/${POSTGRES_DB:-sliqdesk}
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-please}
+  JWT_TTL_HOURS: ${JWT_TTL_HOURS:-168}
+  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  SLA_MINUTES: ${SLA_MINUTES:-2}
+  SLA_SWEEP_SECONDS: ${SLA_SWEEP_SECONDS:-60}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -28,6 +42,49 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # API + Socket.IO. On start: apply migrations, seed demo data, serve.
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: sliqdesk-api:local
+    environment: *api-env
+    ports:
+      - '4000:4000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  # SLA worker: same image, different command. Starts after the API is
+  # healthy, which means migrations have been applied.
+  worker:
+    # Same build as the API (the second build is served from Docker's cache).
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: sliqdesk-api:local
+    command: ['node', 'dist/worker.js']
+    environment: *api-env
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres-data:

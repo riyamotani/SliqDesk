@@ -12,11 +12,14 @@ updates and SLA alerts. Node.js (Express) API + React frontend, started with one
 - [SliqDesk](#sliqdesk)
   - [Contents](#contents)
   - [Setup](#setup)
-    - [Local development (current)](#local-development-current)
+    - [Seeded logins](#seeded-logins)
+    - [Local development without Docker for the app](#local-development-without-docker-for-the-app)
+    - [Triggering an SLA alert](#triggering-an-sla-alert)
     - [Checks](#checks)
   - [Architecture](#architecture)
   - [Key decisions](#key-decisions)
     - [Real-time updates](#real-time-updates)
+    - [Background processing: SLA alerts](#background-processing-sla-alerts)
     - [Data model and tenant isolation (so far)](#data-model-and-tenant-isolation-so-far)
   - [API](#api)
   - [Implementation status](#implementation-status)
@@ -26,29 +29,50 @@ updates and SLA alerts. Node.js (Express) API + React frontend, started with one
 
 ## Setup
 
-_To be completed once the full Docker setup lands._ Planned:
+From a fresh clone, with Docker running:
 
 ```bash
-docker compose up        # starts Postgres, Redis, API, worker and web app
+docker compose up --build
 ```
 
-### Local development (current)
+This starts Postgres, Redis, the API (applies migrations and seeds demo data on start) and the
+SLA worker. No `.env` is needed; every setting has a working default (see `.env.example` to
+override). The API listens on <http://localhost:4000>.
 
-Requires Node 22+ and Docker.
+To start over with an empty database: `docker compose down -v`.
+
+### Seeded logins
+
+Password for every account: **`password123`**
+
+| Organization | Admin               | Agent               | Viewer               |
+| ------------ | ------------------- | ------------------- | -------------------- |
+| Acme Support | `admin@acme.test`   | `agent@acme.test`   | `viewer@acme.test`   |
+| Globex Help  | `admin@globex.test` | `agent@globex.test` | `viewer@globex.test` |
+
+Each organization has a few tickets in different states. Acme's "Duplicate invoice emails" is
+already overdue, and "Checkout page returns 500" becomes overdue about two minutes after start-up,
+so an SLA alert appears without doing anything.
+
+### Local development without Docker for the app
+
+Requires Node 22+ and Docker (for Postgres and Redis). Stop the `api` and `worker` containers
+first if they are running, since they use the same port.
 
 ```bash
 npm install                                  # installs all workspaces, builds shared, generates Prisma client
 docker compose up -d postgres redis          # database + Redis
 cp .env.example apps/api/.env                # local configuration (working defaults)
 npm run db:deploy -w @sliqdesk/api           # apply database migrations
+npm run db:seed:dev -w @sliqdesk/api         # demo data (safe to repeat)
 npm run dev -w @sliqdesk/api                 # API on http://localhost:4000 (restarts on save)
 npm run dev:worker -w @sliqdesk/api          # SLA worker, in a second terminal
 ```
 
 ### Triggering an SLA alert
 
-1. Set `SLA_MINUTES` low (the default is `2`; `0.5` means 30 seconds) and start the API and the
-   worker.
+1. The SLA window is `SLA_MINUTES` (default `2`). For a faster demo start with
+   `SLA_MINUTES=0.5 docker compose up` (30 seconds), or set it in a `.env` file.
 2. As an Admin or Agent, create a ticket with priority **high** or **urgent**.
 3. Don't comment on it as an Admin or Agent. When the time is up, the ticket is flagged
    overdue and every member of the organization gets a live alert.
@@ -180,8 +204,8 @@ A Postman collection will be added.
 | Real-time updates                      | Done        | Socket.IO org rooms, Redis adapter       |
 | SLA alert                              | Done        | Delayed job + worker + sweep, live alert |
 | Frontend                               | Not started |                                          |
-| One-command Docker setup               | Partial     | Postgres and Redis only so far           |
-| Seed data                              | Not started |                                          |
+| One-command Docker setup               | Partial     | Backend services done; web app next      |
+| Seed data                              | Done        | Idempotent, runs on API start            |
 
 ## Assumptions
 
