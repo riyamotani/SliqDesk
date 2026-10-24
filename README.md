@@ -35,10 +35,12 @@ with one `docker compose up`.
 From a fresh clone, with Docker running:
 
 ```bash
-docker compose up --build
+docker compose up
 ```
 
-Then open **<http://localhost:8080>** and log in with one of the seeded accounts below.
+Then open **<http://localhost:8080>** and log in with one of the seeded accounts below. The first
+start builds the images, which takes a few minutes; the app services always build from the
+current source on `up` (`pull_policy: build`), so a stale local image is never used.
 
 This starts Postgres, Redis, the API (applies migrations and seeds demo data on start), the SLA
 worker and the web app (nginx serving the React build and forwarding `/api` and `/socket.io` to

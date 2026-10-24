@@ -48,6 +48,8 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    # Always build from source on `docker compose up` (never reuse a stale image).
+    pull_policy: build
     image: sliqdesk-api:local
     environment: *api-env
     ports:
@@ -78,6 +80,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    pull_policy: build
     image: sliqdesk-api:local
     command: ['node', 'dist/worker.js']
     environment: *api-env
@@ -92,6 +95,7 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+    pull_policy: build
     ports:
       - '8080:80'
     depends_on:
