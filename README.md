@@ -32,6 +32,11 @@ with one `docker compose up`.
 
 ## Setup
 
+**Prerequisites:** Docker with Compose v2, i.e. [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+on Windows or macOS, or Docker Engine with the Compose plugin on Linux. Nothing else is needed:
+no Node.js, database or `.env` file. Ports **8080** (web app), **4000** (API), **5432**
+(Postgres) and **6379** (Redis) must be free; stop a locally installed Postgres or Redis first.
+
 From a fresh clone, with Docker running:
 
 ```bash
