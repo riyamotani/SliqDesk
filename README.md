@@ -198,7 +198,13 @@ in_progress)`. If a staff member replied, the ticket was resolved or its priorit
 
 All endpoints are under `/api`, take and return JSON, and authenticate with the session cookie
 set by sign-up or login. Errors always look like `{ "error": { "code", "message", "details?" } }`.
-A Postman collection will be added.
+
+**Postman:** import [`docs/SliqDesk.postman_collection.json`](docs/SliqDesk.postman_collection.json)
+and use **Run collection**. It walks through a demo flow (log in, create and work a ticket,
+comment, manage members) followed by security checks (another organization's ticket returns
+404, a Viewer gets 403, the last Admin can't be demoted, a logged-out session gets 401), with a
+test on every request. `baseUrl` defaults to `http://localhost:8080`; Postman stores the session
+cookie after login. From the command line: `npx newman run docs/SliqDesk.postman_collection.json`.
 
 | Method | Path                    | Who            | Purpose                                               |
 | ------ | ----------------------- | -------------- | ----------------------------------------------------- |
