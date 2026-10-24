@@ -71,10 +71,12 @@ docker compose up -d postgres redis          # database + Redis
 cp .env.example apps/api/.env                # local configuration (working defaults)
 npm run db:deploy -w @sliqdesk/api           # apply database migrations
 npm run db:seed:dev -w @sliqdesk/api         # demo data (safe to repeat)
-npm run dev -w @sliqdesk/api                 # API on http://localhost:4000 (restarts on save)
-npm run dev -w @sliqdesk/web                 # web app on http://localhost:5173 (proxies to the API)
-npm run dev:worker -w @sliqdesk/api          # SLA worker, in a second terminal
+npm run dev                                  # shared + API + worker + web in one terminal
 ```
+
+Open <http://localhost:5173>. Every save reloads what changed: the API and worker restart, the
+web app hot-reloads, and edits to `packages/shared` are recompiled and picked up by both. A
+change to `schema.prisma` also needs `npx prisma migrate dev --name <change>` in `apps/api`.
 
 ### Triggering an SLA alert
 
@@ -96,6 +98,12 @@ npm run lint           # ESLint
 npm run format:check   # Prettier
 npm run typecheck      # TypeScript
 ```
+
+**CI:** GitHub Actions (`.github/workflows/ci.yml`) runs all of the above on every push and pull
+request, with integration tests against a Postgres service container. A second job starts the
+stack with `docker compose up --build --wait` from a clean checkout and smoke-tests it through
+nginx (health check, seeded login, ticket list, web page), so the one-command setup is verified
+on every push.
 
 ## Architecture
 
@@ -217,19 +225,20 @@ A Postman collection will be added.
 
 ## Implementation status
 
-| Requirement                            | Status | Notes                                    |
-| -------------------------------------- | ------ | ---------------------------------------- |
-| Data model and migrations              | Done   | Organizations, users, tickets, comments  |
-| Shared roles, transitions, permissions | Done   | With unit tests                          |
-| Sign up, log in, log out               | Done   | Logout revokes the token server-side     |
-| Member management                      | Done   | Last-admin protection, race-safe         |
-| Tickets (CRUD, filters, pagination)    | Done   | Transitions enforced, optimistic locking |
-| Comments                               | Done   |                                          |
-| Real-time updates                      | Done   | Socket.IO org rooms, Redis adapter       |
-| SLA alert                              | Done   | Delayed job + worker + sweep, live alert |
-| Frontend                               | Done   | All pages, live updates, role-aware      |
-| One-command Docker setup               | Done   | postgres, redis, api, worker, web        |
-| Seed data                              | Done   | Idempotent, runs on API start            |
+| Requirement                            | Status | Notes                                     |
+| -------------------------------------- | ------ | ----------------------------------------- |
+| Data model and migrations              | Done   | Organizations, users, tickets, comments   |
+| Shared roles, transitions, permissions | Done   | With unit tests                           |
+| Sign up, log in, log out               | Done   | Logout revokes the token server-side      |
+| Member management                      | Done   | Last-admin protection, race-safe          |
+| Tickets (CRUD, filters, pagination)    | Done   | Transitions enforced, optimistic locking  |
+| Comments                               | Done   |                                           |
+| Real-time updates                      | Done   | Socket.IO org rooms, Redis adapter        |
+| SLA alert                              | Done   | Delayed job + worker + sweep, live alert  |
+| Frontend                               | Done   | All pages, live updates, role-aware       |
+| One-command Docker setup               | Done   | postgres, redis, api, worker, web         |
+| Seed data                              | Done   | Idempotent, runs on API start             |
+| _Optional:_ CI pipeline                | Done   | Lint, types, all tests, Docker smoke test |
 
 ## Assumptions
 

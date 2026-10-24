@@ -9,6 +9,7 @@
   "scripts": {
     "postinstall": "npm run build -w @sliqdesk/shared && npm run prisma:generate -w @sliqdesk/api",
     "build": "npm run build --workspaces --if-present",
+    "dev": "concurrently --names shared,api,worker,web --prefix-colors blue,green,yellow,magenta \"npm run dev -w @sliqdesk/shared\" \"npm run dev -w @sliqdesk/api\" \"npm run dev:worker -w @sliqdesk/api\" \"npm run dev -w @sliqdesk/web\"",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -18,6 +19,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
+    "concurrently": "^9.2.5",
     "eslint": "^9.39.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^5.2.0",
