@@ -1,6 +1,6 @@
 import type { PrismaClient, Role, TicketPriority, TicketStatus } from '@prisma/client';
 import { hashPassword } from './auth/password.js';
-import { addMinutes } from './sla/sla.rules.js';
+import { addMinutes, initialSlaDueAt } from './sla/sla.rules.js';
 
 /**
  * Demo data: two organizations, each with one Admin, Agent and Viewer and a
@@ -18,11 +18,11 @@ interface SeedTicket {
   description: string;
   status: TicketStatus;
   priority: TicketPriority;
+  /** How long before the seed ran the ticket was created. */
+  createdMinutesAgo: number;
   assignee?: 'admin' | 'agent';
   /** Comments as [author, body]; staff comments count as the SLA response. */
   comments?: ['admin' | 'agent', string][];
-  /** high/urgent only: minutes from now until the SLA deadline (negative = already breached). */
-  slaInMinutes?: number;
 }
 
 const ORGS: { name: string; domain: string; tickets: SeedTicket[] }[] = [
@@ -35,14 +35,24 @@ const ORGS: { name: string; domain: string; tickets: SeedTicket[] }[] = [
         description: 'Customers report an error when paying with a saved card.',
         status: 'open',
         priority: 'urgent',
-        // Becomes overdue shortly after start-up: the worker's sweep flags it.
-        slaInMinutes: 2,
+        // Just created and unanswered: it becomes overdue SLA_MINUTES after
+        // start-up, when the worker's sweep flags it and alerts Acme live.
+        createdMinutesAgo: 0,
+      },
+      {
+        title: 'Duplicate invoice emails',
+        description: 'Some customers got the same invoice twice.',
+        status: 'open',
+        priority: 'high',
+        // Unanswered for 45 minutes: already overdue when the app starts.
+        createdMinutesAgo: 45,
       },
       {
         title: 'Cannot reset password',
         description: 'The reset email never arrives for some Gmail addresses.',
         status: 'in_progress',
         priority: 'high',
+        createdMinutesAgo: 90,
         assignee: 'agent',
         comments: [['agent', 'Reproduced with a test account, checking the mail provider logs.']],
       },
@@ -51,22 +61,16 @@ const ORGS: { name: string; domain: string; tickets: SeedTicket[] }[] = [
         description: 'Off-by-one in the monthly export.',
         status: 'open',
         priority: 'medium',
+        createdMinutesAgo: 180,
       },
       {
         title: 'Typo on the pricing page',
         description: '"Proffesional" should be "Professional".',
         status: 'resolved',
         priority: 'low',
+        createdMinutesAgo: 26 * 60,
         assignee: 'agent',
         comments: [['agent', 'Fixed in the latest deploy.']],
-      },
-      {
-        title: 'Duplicate invoice emails',
-        description: 'Some customers got the same invoice twice.',
-        status: 'open',
-        priority: 'high',
-        // Already overdue: shows the "SLA breached" state right away.
-        slaInMinutes: -30,
       },
     ],
   },
@@ -75,10 +79,19 @@ const ORGS: { name: string; domain: string; tickets: SeedTicket[] }[] = [
     domain: 'globex.test',
     tickets: [
       {
+        title: 'Shared drive is read-only',
+        description: 'Nobody can save files to the Projects folder.',
+        status: 'open',
+        priority: 'urgent',
+        // Like Acme's checkout ticket: overdue SLA_MINUTES after start-up.
+        createdMinutesAgo: 0,
+      },
+      {
         title: 'VPN disconnects every hour',
         description: 'Happens on the office network only.',
         status: 'in_progress',
         priority: 'high',
+        createdMinutesAgo: 120,
         assignee: 'admin',
         comments: [['admin', 'Looks like a DHCP lease issue, investigating.']],
       },
@@ -87,19 +100,14 @@ const ORGS: { name: string; domain: string; tickets: SeedTicket[] }[] = [
         description: 'Two MacBooks needed by next month.',
         status: 'open',
         priority: 'low',
-      },
-      {
-        title: 'Shared drive is read-only',
-        description: 'Nobody can save files to the Projects folder.',
-        status: 'open',
-        priority: 'urgent',
-        slaInMinutes: 5,
+        createdMinutesAgo: 2 * 24 * 60,
       },
       {
         title: 'Printer on floor 3 jams',
         description: 'Replaced the tray, still jamming.',
         status: 'closed',
         priority: 'medium',
+        createdMinutesAgo: 3 * 24 * 60,
         assignee: 'agent',
         comments: [['agent', 'Vendor replaced the roller. Closing.']],
       },
@@ -109,7 +117,15 @@ const ORGS: { name: string; domain: string; tickets: SeedTicket[] }[] = [
 
 const ROLES: Role[] = ['admin', 'agent', 'viewer'];
 
-export async function seed(prisma: PrismaClient): Promise<boolean> {
+/**
+ * SLA fields follow the same rules as the app: high/urgent tickets are due
+ * `slaMinutes` after creation, a staff comment within that window satisfies
+ * the SLA, and an unanswered ticket past its deadline is already breached.
+ */
+export async function seed(
+  prisma: PrismaClient,
+  slaMinutes = Number(process.env.SLA_MINUTES) || 2,
+): Promise<boolean> {
   const marker = `admin@${ORGS[0]!.domain}`;
   if (await prisma.user.findUnique({ where: { email: marker } })) return false;
 
@@ -132,10 +148,14 @@ export async function seed(prisma: PrismaClient): Promise<boolean> {
         });
       }
 
-      for (const [i, t] of orgSpec.tickets.entries()) {
-        const createdAt = new Date(now.getTime() - (orgSpec.tickets.length - i) * 3_600_000);
-        const hasStaffComment = (t.comments ?? []).length > 0;
-        const slaDueAt = t.slaInMinutes === undefined ? null : addMinutes(now, t.slaInMinutes);
+      for (const t of orgSpec.tickets) {
+        const createdAt = addMinutes(now, -t.createdMinutesAgo);
+        const slaDueAt = initialSlaDueAt(t.priority, createdAt, slaMinutes);
+        // Staff replies land halfway through the SLA window, so "SLA met" is true.
+        const repliedAt = addMinutes(createdAt, slaMinutes / 2);
+        const answered = (t.comments ?? []).length > 0;
+        const breached = slaDueAt !== null && !answered && slaDueAt <= now;
+
         const ticket = await tx.ticket.create({
           data: {
             organizationId: org.id,
@@ -147,8 +167,8 @@ export async function seed(prisma: PrismaClient): Promise<boolean> {
             priority: t.priority,
             createdAt,
             slaDueAt,
-            slaBreachedAt: t.slaInMinutes !== undefined && t.slaInMinutes < 0 ? slaDueAt : null,
-            firstResponseAt: hasStaffComment ? addMinutes(createdAt, 10) : null,
+            firstResponseAt: answered ? repliedAt : null,
+            slaBreachedAt: breached ? slaDueAt : null,
           },
         });
         for (const [author, body] of t.comments ?? []) {
@@ -158,7 +178,7 @@ export async function seed(prisma: PrismaClient): Promise<boolean> {
               ticketId: ticket.id,
               authorId: users[author].id,
               body,
-              createdAt: addMinutes(createdAt, 10),
+              createdAt: repliedAt,
             },
           });
         }

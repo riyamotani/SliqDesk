@@ -59,9 +59,11 @@ Password for every account: **`password123`**
 | Acme Support | `admin@acme.test`   | `agent@acme.test`   | `viewer@acme.test`   |
 | Globex Help  | `admin@globex.test` | `agent@globex.test` | `viewer@globex.test` |
 
-Each organization has a few tickets in different states. Acme's "Duplicate invoice emails" is
-already overdue, and "Checkout page returns 500" becomes overdue about two minutes after start-up,
-so an SLA alert appears without doing anything.
+Each organization has a few tickets in different states. Acme's "Duplicate invoice emails" has
+been waiting 45 minutes and is already overdue. "Checkout page returns 500" (Acme) and "Shared
+drive is read-only" (Globex) are created at start-up without a reply, so they become overdue
+after `SLA_MINUTES` (2 by default; the worker's sweep picks them up within a minute) and an SLA
+alert appears without doing anything.
 
 ### Local development without Docker for the app
 
